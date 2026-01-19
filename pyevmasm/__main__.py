@@ -64,8 +64,8 @@ def main():
         "--fork",
         default=DEFAULT_FORK,
         type=str,
-        help="Fork, default: cancun. "
-        "Possible: frontier, homestead, tangerine_whistle, spurious_dragon, byzantium, constantinople, istanbul, london, shanghai, cancun, serenity. "
+        help="Fork, default: osaka. "
+        "Possible: frontier, homestead, tangerine_whistle, spurious_dragon, byzantium, constantinople, istanbul, london, shanghai, cancun, osaka, EOF, serenity. "
         "Also an unsigned block number is accepted to select the fork.",
     )
 
