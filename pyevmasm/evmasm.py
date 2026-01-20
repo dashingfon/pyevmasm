@@ -420,9 +420,6 @@ class Instruction(object):
         }
 
 
-# add type information
-
-
 class EthereumObjectFOrmat(object):
 
     def __init__(self) -> None:
@@ -430,6 +427,7 @@ class EthereumObjectFOrmat(object):
         self.types = None
         self.code: list[Instruction] = []
         self.containers: dict = {}
+        self.data: str | bytes | bytearray
 
     def assemble(self, bytes): ...
 

@@ -250,6 +250,13 @@ class EVMTest_Assembler(unittest.TestCase):
     
     def test_EOF_fork(self):
         # test new and updated opcodes
+
+        insn = EVMAsm.disassemble_one(b"\x1e", fork="osaka")
+        self.assertTrue(insn.mnemonic == "CLZ")
+        self.assertTrue(insn.pops == 1)
+        self.assertTrue(insn.pushes == 1)
+        self.assertTrue(insn.fee == 5)
+        
         # test assemble
         # test disassemble
         ...
