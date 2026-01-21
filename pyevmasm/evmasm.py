@@ -1,7 +1,7 @@
 from bisect import bisect
 from binascii import hexlify, unhexlify
 
-from typing import Iterator, Any
+from typing import Iterator, Any, TypedDict
 import copy
 
 DEFAULT_FORK = "cancun"
@@ -246,7 +246,7 @@ class Instruction(object):
         return self._description
 
     @property
-    def bytes(self):
+    def bytes(self) -> bytes:
         """Encoded instruction"""
         b = [bytes([self._opcode])]
         for offset in reversed(range(self.operand_size)):
@@ -420,18 +420,182 @@ class Instruction(object):
         }
 
 
-class EthereumObjectFOrmat(object):
+class Types(TypedDict):
+    inputs: int
+    outputs: int
+    max_stack_increase: int
 
-    def __init__(self) -> None:
-        self.header = None
-        self.types = None
-        self.code: list[Instruction] = []
-        self.containers: dict = {}
-        self.data: str | bytes | bytearray
 
-    def assemble(self, bytes): ...
+class Code(TypedDict):
+    size: int
+    instructions: list[Instruction]
 
-    def disassemble(self, bytes): ...
+
+class Container(TypedDict):
+    size: int
+    data: bytes
+
+
+class Data(TypedDict):
+    size: int
+    data: bytes
+
+
+class EthereumObjectFormat(object):
+    eof_prefix: bytes = b'\xef\x00'
+    type_prefix: bytes = b'\x01'
+    code_prefix: bytes = b'\x02'
+    container_prefix: bytes = b'\x03'
+    data_prefix: bytes = b'\x04'
+
+    def __init__(
+        self,
+        version: int,
+        types: list[Types],
+        code: list[Code],
+        containers: list[Container],
+        data: dict,
+    ) -> None:
+        self.version = version
+        self.types = types
+        self.code = code
+        self.containers = containers
+        self.data = data
+
+    def __repr__(self) -> str:
+        return f"EthereumObjectFormat(version={self.version}, types={self.types}, code={self.code}, containers={self.containers}, data={self.data})"
+
+    def assemble(self) -> bytes:
+        # TODO reformat this better
+        result: list[bytes] = []
+        result.append(self.eof_prefix)
+        result.append(self.version.to_bytes(1, "big"))
+        result.append(self.type_prefix)
+
+        type_size = len(self.code) * 4
+        result.append(type_size.to_bytes(2, "big"))
+
+        result.append(self.code_prefix)
+        num_code = len(self.code)
+        result.append(num_code.to_bytes(2, "big"))
+
+        for code in self.code:
+            result.append(code["size"].to_bytes(2, "big"))
+
+        if self.containers:
+            result.append(self.container_prefix)
+            num_containers = len(self.containers)
+            result.append(num_containers.to_bytes(2, "big"))
+            for container in self.containers:
+                result.append(container["size"].to_bytes(4, "big"))
+
+        result.append(self.data_prefix)
+        result.append(int.to_bytes(self.data["size"], 2, "big"))
+
+        result.append(b'\x00')
+
+        for types in self.types:
+            result.append(types["inputs"].to_bytes(1, "big"))
+            result.append(types["outputs"].to_bytes(1, "big"))
+            result.append(types["max_stack_increase"].to_bytes(2, "big"))
+
+        for code in self.code:
+            result.extend([
+                code.bytes for code in code["instructions"]
+            ])
+
+        for container in self.containers:
+            result.append(container["data"])
+
+        result.append(self.data["data"])
+
+        return b"".join(result)
+
+    @classmethod
+    def disassemble(cls, bytecode: str | bytes | bytearray) -> "EthereumObjectFormat":
+        # TODO reformat this better
+        if isinstance(bytecode, bytes):
+            bytecode = bytearray(bytecode)
+        if isinstance(bytecode, str):
+            bytecode = bytearray(bytecode.encode("latin-1"))
+
+        index = 2
+        magic = bytes(bytecode[:index])
+        if magic != cls.eof_prefix:
+            raise ValueError("Not a valid EthereumObjectFormat")
+        
+        version = int.from_bytes(bytecode[index:index+1], "big")
+        if version > 255 or version == 0:
+            raise ValueError("Not a valid EthereumObjectFormat")
+
+        index += 1
+        types = []
+        code = []
+        containers = []
+        data = {}
+
+        while bytes(bytecode[index]) != b'\x00':
+            type_kind = bytes(bytecode[index])
+
+            if type_kind == b"\x01":
+                index += 3
+            elif type_kind == b"\x02":
+                num_code_sections = int.from_bytes(bytecode[index+1:index+3], "big")
+                index += 3
+                for _ in range(num_code_sections):
+                    types.append({})
+                    code.append({
+                        "size": int.from_bytes(bytecode[index:index+2], "big"),
+                    })
+                    index += 2
+            elif type_kind == b"\x03":
+                num_container_section = int.from_bytes(bytecode[index+1:index+3], "big")
+                index += 3
+                for _ in range(num_container_section):
+                    containers.append({
+                        "size": int.from_bytes(bytecode[index:index+4], "big"),
+                    })
+                    index += 4
+            elif type_kind == b"\xff":
+                data_size = int.from_bytes(bytecode[index+1:index+2], "big")
+                data["size"] = data_size
+                index += 3
+
+        index += 1
+        for type in types:
+            type["inputs"] = int.from_bytes(bytecode[index:index+1], "big")
+            type["outputs"] = int.from_bytes(bytecode[index+1:index+2], "big")
+            type["max_stack_increase"] = int.from_bytes(bytecode[index+2:index+4], "big")
+            index += 4
+
+        index += 1
+        for code in code:
+            code["instructions"] = [Instruction.disassemble(bytecode[index:index+code["size"]])]
+            index += code["size"]
+
+        for container in containers:
+            container["data"] = bytes(bytecode[index:index+container["size"]])
+            index += container["size"]
+
+        data["data"] = bytes(bytecode[index:index+data["size"]])
+
+        eof =  cls(
+            version=version,
+            types=types,
+            code=code,
+            containers=containers,
+            data=data,
+        )
+
+        eof.validate()
+        return eof
+
+
+    def validate(self) -> None:
+        # validate the type_size is equal to 4x num_code_sections
+        # 
+        ...
+
 
 
 def assemble_one(asmcode: str, pc: int = 0, fork: str = DEFAULT_FORK) -> Instruction:
@@ -587,7 +751,7 @@ def disassemble_all(
 
 
 def disassemble(
-    bytecode: str | bytes | bytearray, pc: int = 0, fork: str = DEFAULT_FORK
+    bytecode: str | bytes | bytearray | Iterator, pc: int = 0, fork: str = DEFAULT_FORK
 ) -> str:
     """Disassemble an EVM bytecode
 
@@ -1174,10 +1338,102 @@ osaka_instruction_dict = {
 osaka_instruction_table = InstructionTable(
     osaka_instruction_dict, previous_fork=cancun_instruction_table
 )
+# validate all the instruction tables operands and sizes are correct
+EOF_instruction_dict: dict = {
+    0xD0: (
+        "DATALOAD",
+        0,
+        1,
+        1,
+        4,
+        "Load 32-byte word from data section of EOF container to the stack",
+    ),
+    0xD1: (
+        "DATALOADN",
+        0,
+        0,
+        1,
+        3,
+        "Load 32-byte word from data section of EOF container at given offset to the stack",
+    ),
+    0xD2: ("DATASIZE", 0, 0, 1, 2, "Push data section size to the stack"),
+    0xD3: ("DATACOPY", 0, 3, 0, 3, "Copy a segment of data section to memory"),
+    0xE0: ("RJUMP", 0, 0, 0, 2, "Alter the program counter to relative offset"),
+    0xE1: (
+        "RJUMPI",
+        0,
+        1,
+        0,
+        4,
+        "Conditionally alter the program counter to relative offset",
+    ),
+    0xE2: (
+        "RJUMPV",
+        0,
+        1,
+        0,
+        4,
+        "Alter the program counter to a relative offset in jump table",
+    ),
+    0xE3: ("CALLF", 0, 0, 0, 5, "Call into a function"),
+    0xE4: ("RETF", 0, 0, 0, 3, "Return from a function"),
+    0xE5: (
+        "JUMPF",
+        0,
+        0,
+        0,
+        5,
+        "Chaining function calls without adding a new return stack frame",
+    ),
+    0xE6: ("DUPN", 0, 0, 0, 3, "Duplicate the stack item at the top of the stack"),
+    0xE7: ("SWAPN", 0, 0, 0, 3, "Swap the stack item with the top stack item"),
+    0xE8: (
+        "EXCHANGE",
+        0,
+        0,
+        0,
+        3,
+        "Swap between the first and second nibbles of the stack item",
+    ),
+    0xEC: (
+        "EOFCREATE",
+        0,
+        4,
+        1,
+        32000,
+        "Create a contract using EOF container at given index",
+    ),
+    0xEE: ("RETURNCONTRACT", 0, 2, 0, 0, "Deploy container to an address"),
+    0xF7: (
+        "RETURNDATALOAD",
+        0,
+        1,
+        1,
+        3,
+        "Push 32-byte word from the return data at offset onto the stack",
+    ),
+    0xF8: ("EXTCALL", 0, 4, 1, 100, "Drop-in replacement for CALL instruction"),
+    0xF9: (
+        "EXTDELEGATECALL",
+        0,
+        3,
+        1,
+        100,
+        "Drop-in replacement for DELEGATECALL instruction",
+    ),
+    0xFB: (
+        "EXTSTATICCALL",
+        0,
+        3,
+        1,
+        100,
+        "Drop-in replacement for STATICCALL instruction",
+    ),
+}
 
-EOF_instruction_dict: dict = {}
-
-EOF_instruction_table = InstructionTable({}, previous_fork=cancun_instruction_table)
+EOF_instruction_table = InstructionTable(
+    EOF_instruction_dict, previous_fork=cancun_instruction_table
+)
 
 
 accepted_forks: tuple[str, ...] = (

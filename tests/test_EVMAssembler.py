@@ -249,16 +249,180 @@ class EVMTest_Assembler(unittest.TestCase):
         self.assertTrue(insn.fee == 5)
     
     def test_EOF_fork(self):
-        # test new and updated opcodes
+        insn = EVMAsm.disassemble_one(b"\x1e", fork="EOF")
+        self.assertTrue(insn.mnemonic == "INVALID")
 
-        insn = EVMAsm.disassemble_one(b"\x1e", fork="osaka")
-        self.assertTrue(insn.mnemonic == "CLZ")
+        # test other new and updated opcodes
+        insn = EVMAsm.disassemble_one(b"\xd0", fork="EOF")
+        self.assertTrue(insn.mnemonic == "DATALOAD")
         self.assertTrue(insn.pops == 1)
         self.assertTrue(insn.pushes == 1)
+        self.assertTrue(insn.fee == 4)
+ 
+        insn = EVMAsm.disassemble_one(b"\xd1", fork="EOF")
+        self.assertTrue(insn.mnemonic == "DATALOADN")
+        self.assertTrue(insn.pops == 0)
+        self.assertTrue(insn.pushes == 1)
+        self.assertTrue(insn.fee == 3)
+ 
+        insn = EVMAsm.disassemble_one(b"\xd2", fork="EOF")
+        self.assertTrue(insn.mnemonic == "DATASIZE")
+        self.assertTrue(insn.pops == 0)
+        self.assertTrue(insn.pushes == 1)
+        self.assertTrue(insn.fee == 2)
+ 
+        insn = EVMAsm.disassemble_one(b"\xd3", fork="EOF")
+        self.assertTrue(insn.mnemonic == "DATACOPY")
+        self.assertTrue(insn.pops == 3)
+        self.assertTrue(insn.pushes == 0)
+        self.assertTrue(insn.fee == 3)
+ 
+        insn = EVMAsm.disassemble_one(b"\xe0", fork="EOF")
+        self.assertTrue(insn.mnemonic == "RJUMP")
+        self.assertTrue(insn.pops == 0)
+        self.assertTrue(insn.pushes == 0)
+        self.assertTrue(insn.fee == 2)
+ 
+        insn = EVMAsm.disassemble_one(b"\xe1", fork="EOF")
+        self.assertTrue(insn.mnemonic == "RJUMPI")
+        self.assertTrue(insn.pops == 1)
+        self.assertTrue(insn.pushes == 0)
+        self.assertTrue(insn.fee == 4)
+ 
+        insn = EVMAsm.disassemble_one(b"\xe2", fork="EOF")
+        self.assertTrue(insn.mnemonic == "RJUMPV")
+        self.assertTrue(insn.pops == 1)
+        self.assertTrue(insn.pushes == 0)
+        self.assertTrue(insn.fee == 4)
+ 
+        insn = EVMAsm.disassemble_one(b"\xe3", fork="EOF")
+        self.assertTrue(insn.mnemonic == "CALLF")
+        self.assertTrue(insn.pops == 0)
+        self.assertTrue(insn.pushes == 0)
         self.assertTrue(insn.fee == 5)
-        
+ 
+        insn = EVMAsm.disassemble_one(b"\xe4", fork="EOF")
+        self.assertTrue(insn.mnemonic == "RETF")
+        self.assertTrue(insn.pops == 0)
+        self.assertTrue(insn.pushes == 0)
+        self.assertTrue(insn.fee == 3)
+ 
+        insn = EVMAsm.disassemble_one(b"\xe5", fork="EOF")
+        self.assertTrue(insn.mnemonic == "JUMPF")
+        self.assertTrue(insn.pops == 0)
+        self.assertTrue(insn.pushes == 0)
+        self.assertTrue(insn.fee == 5)
+ 
+        insn = EVMAsm.disassemble_one(b"\xe6", fork="EOF")
+        self.assertTrue(insn.mnemonic == "DUPN")
+        self.assertTrue(insn.pops == 0)
+        self.assertTrue(insn.pushes == 0)
+        self.assertTrue(insn.fee == 3)
+ 
+        insn = EVMAsm.disassemble_one(b"\xe7", fork="EOF")
+        self.assertTrue(insn.mnemonic == "SWAPN")
+        self.assertTrue(insn.pops == 0)
+        self.assertTrue(insn.pushes == 0)
+        self.assertTrue(insn.fee == 3)
+ 
+        insn = EVMAsm.disassemble_one(b"\xe8", fork="EOF")
+        self.assertTrue(insn.mnemonic == "EXCHANGE")
+        self.assertTrue(insn.pops == 0)
+        self.assertTrue(insn.pushes == 0)
+        self.assertTrue(insn.fee == 3)
+ 
+        insn = EVMAsm.disassemble_one(b"\xec", fork="EOF")
+        self.assertTrue(insn.mnemonic == "EOFCREATE")
+        self.assertTrue(insn.pops == 4)
+        self.assertTrue(insn.pushes == 1)
+        self.assertTrue(insn.fee == 32000)
+ 
+        insn = EVMAsm.disassemble_one(b"\xee", fork="EOF")
+        self.assertTrue(insn.mnemonic == "RETURNCONTRACT")
+        self.assertTrue(insn.pops == 2)
+        self.assertTrue(insn.pushes == 0)
+        self.assertTrue(insn.fee == 0)
+ 
+        insn = EVMAsm.disassemble_one(b"\xf7", fork="EOF")
+        self.assertTrue(insn.mnemonic == "RETURNDATALOAD")
+        self.assertTrue(insn.pops == 1)
+        self.assertTrue(insn.pushes == 1)
+        self.assertTrue(insn.fee == 3)
+ 
+        insn = EVMAsm.disassemble_one(b"\xf8", fork="EOF")
+        self.assertTrue(insn.mnemonic == "EXTCALL")
+        self.assertTrue(insn.pops == 4)
+        self.assertTrue(insn.pushes == 1)
+        self.assertTrue(insn.fee == 100)
+ 
+        insn = EVMAsm.disassemble_one(b"\xf9", fork="EOF")
+        self.assertTrue(insn.mnemonic == "EXTDELEGATECALL")
+        self.assertTrue(insn.pops == 3)
+        self.assertTrue(insn.pushes == 1)
+        self.assertTrue(insn.fee == 100)
+
+        insn = EVMAsm.disassemble_one(b"\xfb", fork="EOF")
+        self.assertTrue(insn.mnemonic == "EXTSTATICCALL")
+        self.assertTrue(insn.pops == 3)
+        self.assertTrue(insn.pushes == 1)
+        self.assertTrue(insn.fee == 100)
+ 
         # test assemble
         # test disassemble
+
+        eof = EVMAsm.evmasm.EthereumObjectFormat(
+            version=1,
+            types=[
+                {
+                    "inputs": 1,
+                    "outputs": 1,
+                    "max_stack_increase": 1
+                },
+                {
+                    "inputs": 1,
+                    "outputs": 1,
+                    "max_stack_increase": 1
+                }
+            ],
+            code=[
+                {
+                    "size": 3,
+                    "instructions": [
+                        EVMAsm.assemble_one("ADD"),
+                        EVMAsm.assemble_one("ADD"),
+                        EVMAsm.assemble_one("ADD")
+                    ]
+                },
+                {
+                    "size": 3,
+                    "instructions": [
+                        EVMAsm.assemble_one("ADD"),
+                        EVMAsm.assemble_one("ADD"),
+                        EVMAsm.assemble_one("ADD")
+                    ]
+                }
+            ],
+            containers=[
+                {
+                    "size": 3,
+                    "data": b'\x03\x04\x04'
+                }
+            ],
+            data={
+                "size": 3,
+                "data": b'\x03\x04\x04'
+            }
+        )
+        bytecode = eof.assemble()
+        calculated_eof = EVMAsm.evmasm.EthereumObjectFormat.disassemble(bytecode)
+
+        self.assertEqual(eof.version, calculated_eof.version)
+        self.assertEqual(eof.types, calculated_eof.types)
+        self.assertEqual(eof.code, calculated_eof.code)
+        self.assertEqual(eof.containers, calculated_eof.containers)
+        self.assertEqual(eof.data, calculated_eof.data)
+
+
         ...
 
     def test_assemble_DUP1_regression(self):
